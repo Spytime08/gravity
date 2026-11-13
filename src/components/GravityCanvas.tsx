@@ -7,6 +7,7 @@ interface Props {
   showTrails: boolean;
   running: boolean;
   onParticleCount: (count: number) => void;
+  isDark: boolean;
 }
 
 const COLORS = [
@@ -16,11 +17,19 @@ const COLORS = [
   '#34d399', '#4ade80', '#a3e635', '#facc15',
 ];
 
-function randomColor(): string {
-  return COLORS[Math.floor(Math.random() * COLORS.length)];
+const LIGHT_COLORS = [
+  '#4f46e5', '#7c3aed', '#8b5cf6', '#a855f7',
+  '#d946ef', '#ec4899', '#f43f5e', '#ef4444',
+  '#3b82f6', '#0ea5e9', '#06b6d4', '#14b8a6',
+  '#10b981', '#22c55e', '#84cc16', '#eab308',
+];
+
+function randomColor(isDark: boolean): string {
+  const palette = isDark ? COLORS : LIGHT_COLORS;
+  return palette[Math.floor(Math.random() * palette.length)];
 }
 
-function createParticle(x: number, y: number, mass: number, fixed = false): Particle {
+function createParticle(x: number, y: number, mass: number, isDark: boolean, fixed = false): Particle {
   const angle = Math.random() * Math.PI * 2;
   const speed = fixed ? 0 : Math.random() * 2;
   return {
@@ -31,18 +40,24 @@ function createParticle(x: number, y: number, mass: number, fixed = false): Part
     vy: Math.sin(angle) * speed,
     mass,
     radius: Math.max(3, Math.sqrt(mass) * 2),
-    color: randomColor(),
+    color: randomColor(isDark),
     trail: [],
     fixed,
   };
 }
 
-export default function GravityCanvas({ gravityStrength, trailLength, showTrails, running, onParticleCount }: Props) {
+export default function GravityCanvas({ gravityStrength, trailLength, showTrails, running, onParticleCount, isDark }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
   const animFrameRef = useRef<number>(0);
   const mouseRef = useRef<{ x: number; y: number; down: boolean }>({ x: 0, y: 0, down: false });
+  const isDarkRef = useRef(isDark);
   const [dimensions, setDimensions] = useState({ width: window.innerWidth, height: window.innerHeight });
+
+  // Keep ref in sync
+  useEffect(() => {
+    isDarkRef.current = isDark;
+  }, [isDark]);
 
   // Initialize with some particles
   useEffect(() => {
@@ -50,8 +65,8 @@ export default function GravityCanvas({ gravityStrength, trailLength, showTrails
     const cy = dimensions.height / 2;
 
     // Central massive body
-    const center = createParticle(cx, cy, 500, true);
-    center.color = '#fbbf24';
+    const center = createParticle(cx, cy, 500, isDark, true);
+    center.color = isDark ? '#fbbf24' : '#f59e0b';
     center.radius = 20;
 
     const particles: Particle[] = [center];
@@ -62,7 +77,7 @@ export default function GravityCanvas({ gravityStrength, trailLength, showTrails
       const dist = 100 + Math.random() * 250;
       const px = cx + Math.cos(angle) * dist;
       const py = cy + Math.sin(angle) * dist;
-      const p = createParticle(px, py, 1 + Math.random() * 5);
+      const p = createParticle(px, py, 1 + Math.random() * 5, isDark);
 
       // Give orbital velocity
       const speed = Math.sqrt((gravityStrength * center.mass) / dist) * 0.01;
@@ -93,7 +108,7 @@ export default function GravityCanvas({ gravityStrength, trailLength, showTrails
     mouseRef.current = { x, y, down: true };
 
     // Add particle on click
-    const p = createParticle(x, y, 5 + Math.random() * 15);
+    const p = createParticle(x, y, 5 + Math.random() * 15, isDarkRef.current);
     // Give it some velocity toward center for interesting orbits
     const cx = dimensions.width / 2;
     const cy = dimensions.height / 2;
@@ -131,8 +146,14 @@ export default function GravityCanvas({ gravityStrength, trailLength, showTrails
       canvas.width = width;
       canvas.height = height;
 
-      // Background
-      ctx.fillStyle = 'rgba(3, 7, 18, 0.15)';
+      const dark = isDarkRef.current;
+
+      // Background - transparent to show CSS background
+      if (dark) {
+        ctx.fillStyle = 'rgba(3, 7, 18, 0.15)';
+      } else {
+        ctx.fillStyle = 'rgba(240, 244, 255, 0.15)';
+      }
       ctx.fillRect(0, 0, width, height);
 
       const particles = particlesRef.current;
@@ -225,7 +246,7 @@ export default function GravityCanvas({ gravityStrength, trailLength, showTrails
           for (let i = 1; i < p.trail.length; i++) {
             ctx.lineTo(p.trail[i].x, p.trail[i].y);
           }
-          ctx.strokeStyle = p.color + '40';
+          ctx.strokeStyle = p.color + (dark ? '40' : '50');
           ctx.lineWidth = p.radius * 0.5;
           ctx.stroke();
         }
@@ -235,8 +256,8 @@ export default function GravityCanvas({ gravityStrength, trailLength, showTrails
       for (const p of particles) {
         // Glow effect
         const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.radius * 3);
-        gradient.addColorStop(0, p.color + 'cc');
-        gradient.addColorStop(0.5, p.color + '44');
+        gradient.addColorStop(0, p.color + (dark ? 'cc' : '99'));
+        gradient.addColorStop(0.5, p.color + (dark ? '44' : '33'));
         gradient.addColorStop(1, 'transparent');
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.radius * 3, 0, Math.PI * 2);
@@ -252,7 +273,7 @@ export default function GravityCanvas({ gravityStrength, trailLength, showTrails
         // Highlight
         ctx.beginPath();
         ctx.arc(p.x - p.radius * 0.3, p.y - p.radius * 0.3, p.radius * 0.4, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillStyle = `rgba(255,255,255,${dark ? 0.3 : 0.4})`;
         ctx.fill();
       }
 
@@ -261,7 +282,7 @@ export default function GravityCanvas({ gravityStrength, trailLength, showTrails
         const mx = mouseRef.current.x;
         const my = mouseRef.current.y;
         const gradient = ctx.createRadialGradient(mx, my, 0, mx, my, 60);
-        gradient.addColorStop(0, 'rgba(255,255,255,0.2)');
+        gradient.addColorStop(0, dark ? 'rgba(255,255,255,0.2)' : 'rgba(99,102,241,0.2)');
         gradient.addColorStop(1, 'transparent');
         ctx.beginPath();
         ctx.arc(mx, my, 60, 0, Math.PI * 2);
